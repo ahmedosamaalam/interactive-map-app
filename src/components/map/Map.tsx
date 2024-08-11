@@ -13,6 +13,10 @@ export type MapWithPolygonDrawerProps = {
   zoom?: number;
 };
 
+// Helper function to convert Leaflet LatLngs to LatLngTuple
+const toLatLngTuple = (latlngs: any): LatLngTuple[] =>
+  latlngs.map((latlng: any) => [latlng.lat, latlng.lng]);
+
 // Helper function to convert Leaflet LatLngs to Position
 const toPosition = (latlngs: LatLngLiteral[]): Position[] => {
   const positions = latlngs.map(
@@ -59,7 +63,7 @@ const checkIntersections = (
 };
 
 const PolygonDrawer: React.FC = () => {
-  const [positions, setPositions] = useState<Position[]>([]);
+  const [positions, setPositions] = useState<LatLngTuple[]>([]);
   const [polygons, setPolygons] = useState<Position[][]>([]);
   const [intersecting, setIntersecting] = useState<boolean>(false);
 
@@ -89,36 +93,44 @@ const PolygonDrawer: React.FC = () => {
   };
 
   // Handler for when a shape is edited
+  // const handleEdited = (e: any) => {
+  //   const layers = e.layers;
+  //   const updatedPolygons: Position[][] = [];
+  //   const newPolygons: Position[][] = [];
+
+  //   // Collect all updated polygons
+  //   layers.eachLayer((layer: any) => {
+  //     const updatedPositions = toPosition(layer.getLatLngs()[0]);
+  //     newPolygons.push(updatedPositions);
+  //   });
+
+  //   // Check for intersections among updated polygons
+  //   let hasIntersection = false;
+  //   for (let i = 0; i < newPolygons.length; i++) {
+  //     for (let j = i + 1; j < newPolygons.length; j++) {
+  //       if (checkIntersections(newPolygons[i], [newPolygons[j]])) {
+  //         hasIntersection = true;
+  //         break;
+  //       }
+  //     }
+  //     if (hasIntersection) break;
+  //   }
+
+  //   if (!hasIntersection) {
+  //     setPolygons(newPolygons);
+  //   }
+
+  //   setPositions(newPolygons.flat());
+
+  //   setIntersecting(hasIntersection);
+  // };
+
   const handleEdited = (e: any) => {
     const layers = e.layers;
-    const updatedPolygons: Position[][] = [];
-    const newPolygons: Position[][] = [];
-
-    // Collect all updated polygons
     layers.eachLayer((layer: any) => {
-      const updatedPositions = toPosition(layer.getLatLngs()[0]);
-      newPolygons.push(updatedPositions);
+      const updatedPositions = toLatLngTuple(layer.getLatLngs()[0]);
+      setPositions(updatedPositions);
     });
-
-    // Check for intersections among updated polygons
-    let hasIntersection = false;
-    for (let i = 0; i < newPolygons.length; i++) {
-      for (let j = i + 1; j < newPolygons.length; j++) {
-        if (checkIntersections(newPolygons[i], [newPolygons[j]])) {
-          hasIntersection = true;
-          break;
-        }
-      }
-      if (hasIntersection) break;
-    }
-
-    if (!hasIntersection) {
-      setPolygons(newPolygons);
-    }
-
-    setPositions(newPolygons.flat());
-
-    setIntersecting(hasIntersection);
   };
 
   return (
@@ -142,12 +154,12 @@ const PolygonDrawer: React.FC = () => {
         }}
       />
 
-      {positions.length > 0 && (
+      {/* {positions.length > 0 && (
         <Polygon
           positions={positions}
           pathOptions={{ color: intersecting ? "red" : "blue" }}
         />
-      )}
+      )} */}
     </FeatureGroup>
   );
 };

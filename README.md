@@ -11,12 +11,7 @@ This project is an interactive web application that allows users to draw, edit, 
 - [Getting Started](#getting-started)  
   - [Installation](#installation)  
   - [Running the Application](#running-the-application)  
-  - [Running Storybook](#running-storybook)  
-- [Usage](#usage)  
-- [Requirements](#requirements)  
-- [Contributing](#contributing)  
-- [License](#license)  
-- [Contact](#contact)  
+  - [Running Storybook](#running-storybook)   
 
 ## Features  
 
