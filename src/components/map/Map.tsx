@@ -49,23 +49,29 @@ const toGeoJSON = (positions: Position[]) => {
 const checkIntersections = (
   newPolygon: Position[],
   existingPolygons: Position[][]
-) => {
+): number | null => {
   const newPolygonGeoJSON = toGeoJSON(newPolygon);
 
   // Check for intersections with existing polygons
-  for (const existingPolygon of existingPolygons) {
-    const existingPolygonGeoJSON = toGeoJSON(existingPolygon);
-    if (turf.booleanOverlap(newPolygonGeoJSON, existingPolygonGeoJSON)) {
-      return true; // Intersection detected
+  for (let i = 0; i < existingPolygons.length; i++) {
+    const existingPolygonGeoJSON = toGeoJSON(existingPolygons[i]);
+    if (
+      turf.booleanOverlap(newPolygonGeoJSON, existingPolygonGeoJSON) ||
+      turf.booleanCrosses(newPolygonGeoJSON, existingPolygonGeoJSON) ||
+      turf.booleanIntersects(newPolygonGeoJSON, existingPolygonGeoJSON)
+    ) {
+      return i; // Return index of intersecting polygon
     }
   }
-  return false; // No intersection
+  return null; // No intersection
 };
 
 const PolygonDrawer: React.FC = () => {
-  const [positions, setPositions] = useState<LatLngTuple[]>([]);
   const [polygons, setPolygons] = useState<Position[][]>([]);
-  const [intersecting, setIntersecting] = useState<boolean>(false);
+  const [intersectingIndex, setIntersectingIndex] = useState<number | null>(
+    null
+  );
+  const [intersectingIndices, setIntersectingIndices] = useState<number[]>([]);
 
   // Handler for when the polygon is created
   const handleCreated = (e: any) => {
@@ -73,64 +79,76 @@ const PolygonDrawer: React.FC = () => {
     const newPositions = toPosition(layer.getLatLngs()[0]);
 
     setPolygons((prevPolygons) => {
-      if (checkIntersections(newPositions, prevPolygons)) {
-        setIntersecting(true); // Indicate intersection
-        return prevPolygons; // Do not update the state
+      const intersectionIndex = checkIntersections(newPositions, prevPolygons);
+      if (intersectionIndex !== null) {
+        setIntersectingIndex(prevPolygons.length); // Indicate intersection at new polygon index
+        setIntersectingIndices([intersectionIndex, polygons.length]); // Set indices of intersecting polygons
+        return [...prevPolygons, newPositions]; // Add new polygon but mark it as intersecting
       } else {
-        setIntersecting(false);
+        setIntersectingIndex(null);
+        setIntersectingIndices([]); // No intersections
         return [...prevPolygons, newPositions];
       }
     });
-
-    setPositions(newPositions);
+    setIntersectingIndices([]);
   };
 
   // Handler for when a shape is deleted
-  const handleDeleted = () => {
-    setPositions([]);
-    setPolygons([]);
-    setIntersecting(false);
+  const handleDeleted = (e: any) => {
+    const layers = e.layers;
+    const remainingPolygons: Position[][] = [];
+
+    // Remove the deleted layers from the current polygons
+    polygons.forEach((polygon) => {
+      const layerPositions = layers
+        .getLayers()
+        .map((layer: any) => toPosition(layer.getLatLngs()[0]));
+      const isDeleted = layerPositions.some(
+        (deletedPositions: any) =>
+          JSON.stringify(polygon) === JSON.stringify(deletedPositions)
+      );
+      if (!isDeleted) {
+        remainingPolygons.push(polygon);
+      }
+    });
+
+    setPolygons(remainingPolygons);
+    setIntersectingIndex(null);
   };
 
   // Handler for when a shape is edited
-  // const handleEdited = (e: any) => {
-  //   const layers = e.layers;
-  //   const updatedPolygons: Position[][] = [];
-  //   const newPolygons: Position[][] = [];
-
-  //   // Collect all updated polygons
-  //   layers.eachLayer((layer: any) => {
-  //     const updatedPositions = toPosition(layer.getLatLngs()[0]);
-  //     newPolygons.push(updatedPositions);
-  //   });
-
-  //   // Check for intersections among updated polygons
-  //   let hasIntersection = false;
-  //   for (let i = 0; i < newPolygons.length; i++) {
-  //     for (let j = i + 1; j < newPolygons.length; j++) {
-  //       if (checkIntersections(newPolygons[i], [newPolygons[j]])) {
-  //         hasIntersection = true;
-  //         break;
-  //       }
-  //     }
-  //     if (hasIntersection) break;
-  //   }
-
-  //   if (!hasIntersection) {
-  //     setPolygons(newPolygons);
-  //   }
-
-  //   setPositions(newPolygons.flat());
-
-  //   setIntersecting(hasIntersection);
-  // };
-
   const handleEdited = (e: any) => {
-    const layers = e.layers;
-    layers.eachLayer((layer: any) => {
-      const updatedPositions = toLatLngTuple(layer.getLatLngs()[0]);
-      setPositions(updatedPositions);
+    const editedLayers = e.layers.getLayers();
+    const updatedPolygons = [...polygons];
+
+    editedLayers.forEach((layer: any) => {
+      const updatedPositions = toPosition(layer.getLatLngs()[0]);
+      const index = polygons.findIndex(
+        (polygon) =>
+          JSON.stringify(polygon) ===
+          JSON.stringify(toPosition(layer.getLatLngs()[0]))
+      );
+
+      // Update only if index is found
+      if (index !== -1) {
+        updatedPolygons[index] = updatedPositions;
+      }
     });
+
+    // Re-check intersections among all polygons
+    const intersectingIndices = [];
+    for (let i = 0; i < updatedPolygons.length; i++) {
+      const intersectionIndex = checkIntersections(
+        updatedPolygons[i],
+        updatedPolygons.filter((_, idx) => idx !== i)
+      );
+      if (intersectionIndex !== null) {
+        intersectingIndices.push(i); // Add intersecting polygon index
+      }
+    }
+
+    setIntersectingIndices(intersectingIndices);
+    setPolygons(updatedPolygons);
   };
 
   return (
@@ -154,12 +172,13 @@ const PolygonDrawer: React.FC = () => {
         }}
       />
 
-      {/* {positions.length > 0 && (
+      {polygons.map((polygon, index) => (
         <Polygon
-          positions={positions}
-          pathOptions={{ color: intersecting ? "red" : "blue" }}
+          key={index}
+          positions={polygon}
+          pathOptions={{ color: intersectingIndex === index ? "red" : "blue" }}
         />
-      )} */}
+      ))}
     </FeatureGroup>
   );
 };
